@@ -2,22 +2,12 @@ return function(settings)
     local self = {}
 
     self._settings = {
-    TOGGLE = "L",
-	TARGET_LIMB = "HumanoidRootPart",
-	LIMB_SIZE = 15,
-	LIMB_TRANSPARENCY = 0.9,
-	LIMB_CAN_COLLIDE = false,
-	MOBILE_BUTTON = true,
-	LISTEN_FOR_INPUT = true,
-	TEAM_CHECK = true,
-	FORCEFIELD_CHECK = true,
-	RESET_LIMB_ON_DEATH2 = false,
-	USE_HIGHLIGHT = true,
-	DEPTH_MODE = "AlwaysOnTop",
-	HIGHLIGHT_FILL_COLOR = Color3.fromRGB(255, 117, 24),
-	HIGHLIGHT_FILL_TRANSPARENCY = 0.7,
-	HIGHLIGHT_OUTLINE_COLOR = Color3.fromRGB(0,0,0),
-	HIGHLIGHT_OUTLINE_TRANSPARENCY = 1,
+        TARGET_LIMB = "HumanoidRootPart",
+        LIMB_SIZE = 15,
+        LIMB_TRANSPARENCY = 0.9,
+        LIMB_CAN_COLLIDE = false,
+        TEAM_CHECK = true,
+        FORCEFIELD_CHECK = true,
     }
 
     for k,v in pairs(settings or {}) do
@@ -29,6 +19,9 @@ return function(settings)
 
     local Players = game:GetService("Players")
     local LocalPlayer = Players.LocalPlayer
+
+    -- guardar originales
+    local original = {}
 
     -- =========================
     -- CHECK LIMB (MULTI)
@@ -49,6 +42,14 @@ return function(settings)
             if part:IsA("BasePart") then
                 if isTarget(part, self._settings.TARGET_LIMB) then
 
+                    if not original[part] then
+                        original[part] = {
+                            Size = part.Size,
+                            Transparency = part.Transparency,
+                            CanCollide = part.CanCollide
+                        }
+                    end
+
                     part.Size = Vector3.new(
                         self._settings.LIMB_SIZE,
                         self._settings.LIMB_SIZE,
@@ -60,6 +61,20 @@ return function(settings)
                 end
             end
         end
+    end
+
+    -- =========================
+    -- RESET
+    -- =========================
+    function self:reset()
+        for part, data in pairs(original) do
+            if part and part.Parent then
+                part.Size = data.Size
+                part.Transparency = data.Transparency
+                part.CanCollide = data.CanCollide
+            end
+        end
+        table.clear(original)
     end
 
     -- =========================
@@ -101,6 +116,7 @@ return function(settings)
                 self._connections.loop:Disconnect()
                 self._connections.loop = nil
             end
+            self:reset()
         end
     end
 

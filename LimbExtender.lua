@@ -158,44 +158,53 @@ function PlayerData:modifyLimbProperties(limb)
     local canCollide = parent._settings.LIMB_CAN_COLLIDE
     local transparency = parent._settings.LIMB_TRANSPARENCY
 
-    -- Watch properties (seguimos forzando normalmente)
-    entry.SizeConnection = watchProperty(limb, "Size", function(l)
-        l.Size = newSize
-    end)
+    -- Solo aplicamos el hitbox a la limb que el usuario eligió en Target Limb
+    local targetLimbName = parent._settings.TARGET_LIMB
 
-    entry.TransparencyConnection = watchProperty(limb, "Transparency", function(l)
-        l.Transparency = transparency
-    end)
+    -- Forzamos las propiedades solo si esta limb es la que el usuario seleccionó
+    if limb.Name == targetLimbName then
+        entry.SizeConnection = watchProperty(limb, "Size", function(l)
+            l.Size = newSize
+        end)
 
-    entry.CollisionConnection = watchProperty(limb, "CanCollide", function(l)
-        l.CanCollide = canCollide
-    end)
+        entry.CollisionConnection = watchProperty(limb, "CanCollide", function(l)
+            l.CanCollide = canCollide
+        end)
 
-    -- Aplicación inicial
-    if limb and limb.Parent then
-        limb.Size = newSize
-        limb.Transparency = transparency
-        limb.CanCollide = canCollide
-        
-        if parent._settings.TARGET_LIMB ~= "HumanoidRootPart" then
-            limb.Massless = true
+        if limb and limb.Parent then
+            limb.Size = newSize
+            limb.CanCollide = canCollide
+            
+            if targetLimbName ~= "HumanoidRootPart" then
+                limb.Massless = true
+            end
         end
     end
 
-    -- FIX: Reset al bajarse de moto/carro para evitar bug de cuerpo flotando
+    -- Transparency se aplica siempre (no causa bugs)
+    entry.TransparencyConnection = watchProperty(limb, "Transparency", function(l)
+        l.Transparency = transparency
+    end)
+    if limb and limb.Parent then
+        limb.Transparency = transparency
+    end
+
+    -- =============================================
+    -- ANTIBUG: Solo para la limb seleccionada (cuando otros se bajan de vehículo)
+    -- =============================================
     local character = limb.Parent
-    if character then
+    if character and character ~= localPlayer.Character and limb.Name == targetLimbName then
         local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if humanoid and not character:FindFirstChild("LimbVehicleReset") then
-            
-            local resetConn = humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
+        if humanoid and not character:FindFirstChild("AntiBug_" .. targetLimbName) then
+
+            humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
                 if humanoid.SeatPart == nil then  -- Se bajó del vehículo
-                    task.delay(0.25, function()
+                    task.delay(0.35, function()
                         if limb and limb.Parent and not self._destroyed then
                             pcall(function()
                                 limb.Size = newSize
                                 limb.CanCollide = canCollide
-                                if parent._settings.TARGET_LIMB ~= "HumanoidRootPart" then
+                                if targetLimbName ~= "HumanoidRootPart" then
                                     limb.Massless = true
                                 end
                             end)
@@ -204,13 +213,9 @@ function PlayerData:modifyLimbProperties(limb)
                 end
             end)
 
-            -- Tag para no crear múltiples conexiones
             local tag = Instance.new("BoolValue")
-            tag.Name = "LimbVehicleReset"
+            tag.Name = "AntiBug_" .. targetLimbName
             tag.Parent = character
-            tag.Destroying:Connect(function()
-                if resetConn then resetConn:Disconnect() end
-            end)
         end
     end
 

@@ -146,84 +146,38 @@ function PlayerData:restoreLimbProperties(limb)
 end
 
 function PlayerData:modifyLimbProperties(limb)
-    local parent = self._parent
-    if not limb then return end
-    if parent._limbStore[limb] then return end
+	local parent = self._parent
+	if not limb then return end
+	if parent._limbStore[limb] then return end
+	self:saveLimbProperties(limb)
+	
+	local entry = parent._limbStore[limb]
+	local sizeVal = parent._settings.LIMB_SIZE or DEFAULTS.LIMB_SIZE
+	local newSize = Vector3.new(sizeVal, sizeVal, sizeVal)
+	local canCollide = parent._settings.LIMB_CAN_COLLIDE
+	local transparency = parent._settings.LIMB_TRANSPARENCY
 
-    self:saveLimbProperties(limb)
+	entry.SizeConnection = watchProperty(limb, "Size", function(l)
+		l.Size = newSize
+	end)
+	
+	entry.TransparencyConnection = watchProperty(limb, "Transparency", function(l)
+		l.Transparency = transparency
+	end)
+	
+	entry.CollisionConnection = watchProperty(limb, "CanCollide", function(l)
+		l.CanCollide = canCollide
+	end)
 
-    local entry = parent._limbStore[limb]
-    local sizeVal = parent._settings.LIMB_SIZE or DEFAULTS.LIMB_SIZE
-    local newSize = Vector3.new(sizeVal, sizeVal, sizeVal)
-    local canCollide = parent._settings.LIMB_CAN_COLLIDE
-    local transparency = parent._settings.LIMB_TRANSPARENCY
-
-    -- Solo aplicamos el hitbox a la limb que el usuario eligió en Target Limb
-    local targetLimbName = parent._settings.TARGET_LIMB
-
-    -- Forzamos las propiedades solo si esta limb es la que el usuario seleccionó
-    if limb.Name == targetLimbName then
-        entry.SizeConnection = watchProperty(limb, "Size", function(l)
-            l.Size = newSize
-        end)
-
-        entry.CollisionConnection = watchProperty(limb, "CanCollide", function(l)
-            l.CanCollide = canCollide
-        end)
-
-        if limb and limb.Parent then
-            limb.Size = newSize
-            limb.CanCollide = canCollide
-            
-            if targetLimbName ~= "HumanoidRootPart" then
-                limb.Massless = true
-            end
-        end
-    end
-
-    -- Transparency se aplica siempre (no causa bugs)
-    entry.TransparencyConnection = watchProperty(limb, "Transparency", function(l)
-        l.Transparency = transparency
-    end)
-    if limb and limb.Parent then
-        limb.Transparency = transparency
-    end
-
-    -- =============================================
-    -- ANTIBUG: Solo para la limb seleccionada (cuando otros se bajan de vehículo)
-    -- =============================================
-    local character = limb.Parent
-    if character and character ~= localPlayer.Character and limb.Name == targetLimbName then
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if humanoid and not character:FindFirstChild("AntiBug_" .. targetLimbName) then
-
-            humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
-                if humanoid.SeatPart == nil then  -- Se bajó del vehículo
-                    task.delay(0.35, function()
-                        if limb and limb.Parent and not self._destroyed then
-                            pcall(function()
-                                limb.Size = newSize
-                                limb.CanCollide = canCollide
-                                if targetLimbName ~= "HumanoidRootPart" then
-                                    limb.Massless = true
-                                end
-                            end)
-                        end
-                    end)
-                end
-            end)
-
-            local tag = Instance.new("BoolValue")
-            tag.Name = "AntiBug_" .. targetLimbName
-            tag.Parent = character
-        end
-    end
-
-    if limbExtenderData.limbs then 
-        limbExtenderData.limbs[limb] = parent._limbStore[limb] 
-    end
-end
-
+	if limb and limb.Parent then
+		limb.Size = newSize
+		limb.Transparency = parent._settings.LIMB_TRANSPARENCY
+		limb.CanCollide = canCollide
+		if parent._settings.TARGET_LIMB ~= "HumanoidRootPart" then
+			limb.Massless = true
+		end
+	end
+	
 function PlayerData:spoofSize(part)
 	if not part then return end
     local saved = part.Size
@@ -308,85 +262,95 @@ end, ("Player_%s_TroveRestore_%s"):format(self.player.Name, tostring(part)))
 end
 end)
 end
-end
     -- =============================================
-    -- NO COLLISION UPPER TORSO <-> LOWER TORSO
-    -- Versión AGRESIVA (la más efectiva)
+    -- ANTIBUG: Evita que otros jugadores se vean flotando al bajarse de moto/carro
+    -- (Solo para la limb que elegiste en Target Limb)
     -- =============================================
-    local function forceNoTorsoCollision(character)
-        if not character or not character.Parent then return end
+    local targetLimbName = parent._settings.TARGET_LIMB
 
-        local upper = character:FindFirstChild("UpperTorso") or character:WaitForChild("UpperTorso", 5)
-        local lower = character:FindFirstChild("LowerTorso") or character:WaitForChild("LowerTorso", 5)
+    if char and char ~= localPlayer.Character then
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid and not char:FindFirstChild("AntiBugVehicleTag") then
 
-        if not (upper and lower) then return end
-
-        if upper:FindFirstChild("NoTorsoCollideTag") then return end
-
-        local RunService = game:GetService("RunService")
-
-        -- Usamos dos loops para mayor fuerza
-        local conn1 = RunService.Stepped:Connect(function()
-            pcall(function()
-                if upper and upper.Parent then upper.CanCollide = false end
-                if lower and lower.Parent then lower.CanCollide = false end
+            humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
+                if humanoid.SeatPart == nil then
+                    task.delay(0.5, function()
+                        local limb = char:FindFirstChild(targetLimbName)
+                        if limb and not self._destroyed then
+                            pcall(function()
+                                limb.Size = Vector3.new(parent._settings.LIMB_SIZE, parent._settings.LIMB_SIZE, parent._settings.LIMB_SIZE)
+                                limb.CanCollide = parent._settings.LIMB_CAN_COLLIDE
+                                if targetLimbName ~= "HumanoidRootPart" then
+                                    limb.Massless = true
+                                end
+                            end)
+                        end
+                    end)
+                end
             end)
-        end)
 
-        local conn2 = RunService.Heartbeat:Connect(function()
-            pcall(function()
-                if upper and upper.Parent then upper.CanCollide = false end
-                if lower and lower.Parent then lower.CanCollide = false end
-            end)
-        end)
-
-        local tag = Instance.new("BoolValue")
-        tag.Name = "NoTorsoCollideTag"
-        tag.Parent = upper
-
-        -- Cleanup
-        local function cleanup()
-            if conn1 then conn1:Disconnect() end
-            if conn2 then conn2:Disconnect() end
+            local tag = Instance.new("BoolValue")
+            tag.Name = "AntiBugVehicleTag"
+            tag.Parent = char
         end
-
-        character.AncestryChanged:Connect(function()
-            if not character:IsDescendantOf(game) then
-                cleanup()
-            end
-        end)
-
-        -- Extra cleanup por si el tag se destruye
-        tag.Destroying:Connect(cleanup)
     end
 
-    -- Aplicar con delay más seguro
-    task.delay(0.8, function()
-        if self._destroyed then return end
-        if char and char.Parent then
-            forceNoTorsoCollision(char)
+end  -- ← Este "end" cierra la función PlayerData:setupCharacter
+
+-- =============================================
+-- NO COLLISION UPPER TORSO <-> LOWER TORSO
+-- Versión AGRESIVA
+-- =============================================
+local function forceNoTorsoCollision(character)
+    if not character or not character.Parent then return end
+
+    local upper = character:FindFirstChild("UpperTorso") or character:WaitForChild("UpperTorso", 5)
+    local lower = character:FindFirstChild("LowerTorso") or character:WaitForChild("LowerTorso", 5)
+
+    if not (upper and lower) then return end
+    if upper:FindFirstChild("NoTorsoCollideTag") then return end
+
+    local RunService = game:GetService("RunService")
+
+    local conn1 = RunService.Stepped:Connect(function()
+        pcall(function()
+            if upper and upper.Parent then upper.CanCollide = false end
+            if lower and lower.Parent then lower.CanCollide = false end
+        end)
+    end)
+
+    local conn2 = RunService.Heartbeat:Connect(function()
+        pcall(function()
+            if upper and upper.Parent then upper.CanCollide = false end
+            if lower and lower.Parent then lower.CanCollide = false end
+        end)
+    end)
+
+    local tag = Instance.new("BoolValue")
+    tag.Name = "NoTorsoCollideTag"
+    tag.Parent = upper
+
+    local function cleanup()
+        if conn1 then conn1:Disconnect() end
+        if conn2 then conn2:Disconnect() end
+    end
+
+    character.AncestryChanged:Connect(function()
+        if not character:IsDescendantOf(game) then
+            cleanup()
         end
     end)
-end -- ← Este "end" cierra la función PlayerData:setupCharacter
-function PlayerData:onCharacter(char)
-	if not char then return end
-	if self._charDelay then task.cancel(self._charDelay); self._charDelay = nil end
 
-	self._charDelay = task.delay(0.1, function()
-		if self._destroyed then return end
-
-		if self._parent._settings.FORCEFIELD_CHECK then
-			local ff = char:FindFirstChildOfClass("ForceField")
-			if ff then
-				self.conns:Connect(ff.Destroying, function()
-					self:setupCharacter(char)
-				end, ("Player_%s_ForceField_%s"):format(self.player.Name, tostring(char)))
-				return
-			end
-		end
-		self:setupCharacter(char)
-	end)
+    tag.Destroying:Connect(cleanup)
 end
+
+-- Aplicar no collision al personaje actual
+task.delay(0.8, function()
+    if self._destroyed then return end
+    if char and char.Parent then
+        forceNoTorsoCollision(char)
+    end
+end)
 
 function PlayerData:Destroy()
 	if self._destroyed then return end

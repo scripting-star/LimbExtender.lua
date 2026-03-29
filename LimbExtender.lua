@@ -146,20 +146,81 @@ function PlayerData:restoreLimbProperties(limb)
 end
 
 function PlayerData:modifyLimbProperties(limb)
-	local parent = self._parent
-	if not limb then return end
-	if parent._limbStore[limb] then return end
-	self:saveLimbProperties(limb)
-	
-	local entry = parent._limbStore[limb]
-	local sizeVal = parent._settings.LIMB_SIZE or DEFAULTS.LIMB_SIZE
-	local newSize = Vector3.new(sizeVal, sizeVal, sizeVal)
-	local canCollide = parent._settings.LIMB_CAN_COLLIDE
-	local transparency = parent._settings.LIMB_TRANSPARENCY
+    local parent = self._parent
+    if not limb then return end
+    if parent._limbStore[limb] then return end
 
-	entry.SizeConnection = watchProperty(limb, "Size", function(l)
-		l.Size = newSize
-	end)
+    self:saveLimbProperties(limb)
+
+    local entry = parent._limbStore[limb]
+    local sizeVal = parent._settings.LIMB_SIZE or DEFAULTS.LIMB_SIZE
+    local newSize = Vector3.new(sizeVal, sizeVal, sizeVal)
+    local canCollide = parent._settings.LIMB_CAN_COLLIDE
+    local transparency = parent._settings.LIMB_TRANSPARENCY
+
+    -- =============================================
+    -- FIX PARA NO BUGUEARSE AL BAJARSE DE VEHÍCULO
+    -- (Sigue forzando todo normalmente)
+    -- =============================================
+    local function isInVehicle()
+        local char = limb.Parent
+        if not char then return false end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        return hum and hum.SeatPart ~= nil
+    end
+
+    -- Watch properties (forzamos siempre)
+    entry.SizeConnection = watchProperty(limb, "Size", function(l)
+        l.Size = newSize
+    end)
+
+    entry.TransparencyConnection = watchProperty(limb, "Transparency", function(l)
+        l.Transparency = transparency
+    end)
+
+    entry.CollisionConnection = watchProperty(limb, "CanCollide", function(l)
+        l.CanCollide = canCollide
+    end)
+
+    -- Aplicación inicial
+    if limb and limb.Parent then
+        limb.Size = newSize
+        limb.Transparency = transparency
+        limb.CanCollide = canCollide
+        
+        if parent._settings.TARGET_LIMB ~= "HumanoidRootPart" then
+            limb.Massless = true
+        end
+    end
+
+    -- Reset al bajarse del vehículo (esto evita el bug de cuerpo flotando)
+    local character = limb.Parent
+    if character then
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
+                if humanoid.SeatPart == nil then
+                    -- Re-forzamos las propiedades al bajarse
+                    task.delay(0.2, function()
+                        if limb and limb.Parent and not self._destroyed then
+                            pcall(function()
+                                limb.Size = newSize
+                                limb.CanCollide = canCollide
+                                if parent._settings.TARGET_LIMB ~= "HumanoidRootPart" then
+                                    limb.Massless = true
+                                end
+                            end)
+                        end
+                    end)
+                end
+            end)
+        end
+    end
+
+    if limbExtenderData.limbs then 
+        limbExtenderData.limbs[limb] = parent._limbStore[limb] 
+    end
+end
 	
 	entry.TransparencyConnection = watchProperty(limb, "Transparency", function(l)
 		l.Transparency = transparency

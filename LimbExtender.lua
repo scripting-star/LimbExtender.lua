@@ -339,6 +339,52 @@ function PlayerData:setupCharacter(char)
             forceNoTorsoCollision(char)
         end
     end)
+	-- =============================================
+    -- ANTIBUG: Reinicio completo al bajarse de vehículo
+    -- Mantiene tu configuración (tamaño, transparencia, etc.)
+    -- =============================================
+    local targetLimbName = parent._settings.TARGET_LIMB
+    local currentSize = parent._settings.LIMB_SIZE
+    local currentTransparency = parent._settings.LIMB_TRANSPARENCY
+    local currentCanCollide = parent._settings.LIMB_CAN_COLLIDE
+
+    if char and char ~= localPlayer.Character then
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid and not char:FindFirstChild("FullResetVehicleTag") then
+
+            humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
+                if humanoid.SeatPart == nil then
+
+                    task.delay(0.3, function()
+                        if self._destroyed or not char or not char.Parent then return end
+
+                        local limb = char:FindFirstChild(targetLimbName)
+                        if limb then
+                            pcall(function()
+                                self:restoreLimbProperties(limb)
+
+                                task.delay(0.1, function()
+                                    if limb and limb.Parent and not self._destroyed then
+                                        limb.Size = Vector3.new(currentSize, currentSize, currentSize)
+                                        limb.Transparency = currentTransparency
+                                        limb.CanCollide = currentCanCollide
+                                        
+                                        if targetLimbName ~= "HumanoidRootPart" then
+                                            limb.Massless = true
+                                        end
+                                    end
+                                end)
+                            end)
+                        end
+                    end)
+                end
+            end)
+
+            local tag = Instance.new("BoolValue")
+            tag.Name = "FullResetVehicleTag"
+            tag.Parent = char
+        end
+    end
 end -- ← Este "end" cierra la función PlayerData:setupCharacter
 function PlayerData:onCharacter(char)
 	if not char then return end

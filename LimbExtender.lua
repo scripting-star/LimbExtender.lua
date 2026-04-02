@@ -282,10 +282,7 @@ function PlayerData:setupCharacter(char)
 		end
 		
 	end
-	    -- =============================================
-    -- NO COLLISION UPPER TORSO <-> LOWER TORSO
-    -- Versión AGRESIVA (la más efectiva)
-    -- =============================================
+	
     local function forceNoTorsoCollision(character)
         if not character or not character.Parent then return end
 
@@ -297,8 +294,7 @@ function PlayerData:setupCharacter(char)
         if upper:FindFirstChild("NoTorsoCollideTag") then return end
 
         local RunService = game:GetService("RunService")
-
-        -- Usamos dos loops para mayor fuerza
+		
         local conn1 = RunService.Stepped:Connect(function()
             pcall(function()
                 if upper and upper.Parent then upper.CanCollide = false end
@@ -317,7 +313,6 @@ function PlayerData:setupCharacter(char)
         tag.Name = "NoTorsoCollideTag"
         tag.Parent = upper
 
-        -- Cleanup
         local function cleanup()
             if conn1 then conn1:Disconnect() end
             if conn2 then conn2:Disconnect() end
@@ -328,19 +323,17 @@ function PlayerData:setupCharacter(char)
                 cleanup()
             end
         end)
-
-        -- Extra cleanup por si el tag se destruye
+		
         tag.Destroying:Connect(cleanup)
     end
-
-    -- Aplicar con delay más seguro
+	
     task.delay(0.8, function()
         if self._destroyed then return end
         if char and char.Parent then
             forceNoTorsoCollision(char)
         end
     end)
-end -- ← 
+end
 function PlayerData:onCharacter(char)
 	if not char then return end
 	if self._charDelay then task.cancel(self._charDelay); self._charDelay = nil end
